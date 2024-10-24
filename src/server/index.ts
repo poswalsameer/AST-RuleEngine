@@ -8,11 +8,11 @@ const port = 3000;
 
 app.use(bodyParser.json());
 
-// Define routes
-
-// 1. POST /create-rule
 app.post('/create-rule', (req, res) => {
+
   const { ruleString } = req.body;
+  console.log("Received ruleString:", ruleString); 
+
   try {
     const ruleAST: ASTNode = createRule(ruleString);
     res.status(200).json({
@@ -28,7 +28,6 @@ app.post('/create-rule', (req, res) => {
   }
 });
 
-// 2. POST /check-eligibility
 app.post('/check-eligibility', (req, res) => {
   const { ruleString, userData } = req.body;
   try {
@@ -47,7 +46,6 @@ app.post('/check-eligibility', (req, res) => {
   }
 });
 
-// Start the server
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });

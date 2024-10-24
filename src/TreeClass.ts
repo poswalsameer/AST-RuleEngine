@@ -1,120 +1,149 @@
-// Define the structure for AST Node
-export class ASTNode{
-    nodeType: string; 
-    left: ASTNode | null; 
-    right: ASTNode | null; 
-    value: any; 
-  
-    constructor(nodeType: string, left: ASTNode | null = null, right: ASTNode | null = null, value: any = null) {
-      this.nodeType = nodeType;
-      this.left = left;
-      this.right = right;
-      this.value = value;
-    }
+export class ASTNode {
+  nodeType: string;
+  left: ASTNode | null;
+  right: ASTNode | null;
+  value: any;
+
+  constructor(nodeType: string, left: ASTNode | null = null, right: ASTNode | null = null, value: any = null) {
+    this.nodeType = nodeType;
+    this.left = left;
+    this.right = right;
+    this.value = value;
+  }
 }
 
-// Function to create a rule (AST) from a string
+
 export function createRule(ruleString: string): ASTNode {
-    const tokens = tokenize(ruleString);
-    return parseExpression(tokens);
+  if (typeof ruleString !== 'string' || !ruleString.trim()) {
+    throw new Error('Invalid rule string: ruleString must be a non-empty string');
+  }
+
+  const tokens = tokenize(ruleString);
+  return parseExpression(tokens);
+}
+
+function tokenize(ruleString: string): string[] {
+  if (!ruleString || typeof ruleString !== 'string') {
+      throw new Error('Invalid input to tokenize');
   }
   
-  // Tokenize the rule string (simple tokenizer for operators, conditions, parentheses)
-  function tokenize(ruleString: string): string[] {
-    return ruleString.match(/\w+|[><=!]+|['\w\s]+|AND|OR|\(|\)/g) || [];
-  }
-  
-  // Parse the tokens into an AST
+  const tokens = ruleString.match(/[\w\s]+|[><=!]+|AND|OR|\(|\)/g) || [];
+  console.log("Tokens:", tokens); 
+  return tokens.map(token => token.trim()).filter(token => token.length > 0);
+}
+
+
+// Parse the tokens into an AST
 export function parseExpression(tokens: string[]): ASTNode {
-    const stack: ASTNode[] = [];
-    let currentOperator: ASTNode | null = null;
-  
-    for (const token of tokens) {
-      if (token === "AND" || token === "OR") {
-        currentOperator = new ASTNode("operator", null, null, token);
-      } else if (token === "(") {
-        stack.push(currentOperator!);
-        currentOperator = null;
-      } else if (token === ")") {
-        const rightNode = stack.pop()!;
-        currentOperator!.right = rightNode;
-        stack.push(currentOperator!);
-      } else {
-        const conditionNode = parseCondition(token);
-        if (currentOperator) {
-          currentOperator.right = conditionNode;
-          stack.push(currentOperator);
-          currentOperator = null;
-        } else {
-          stack.push(conditionNode);
-        }
+
+  const outputStack: ASTNode[] = [];
+  const operatorStack: ASTNode[] = [];
+
+  const precedence: { [key: string]: number } = { 'AND': 2, 'OR': 1 };
+
+  for (const token of tokens) {
+    if (token === 'AND' || token === 'OR') {
+      const newOperator = new ASTNode('operator', null, null, token);
+
+      while (
+        operatorStack.length &&
+        precedence[operatorStack[operatorStack.length - 1].value] >= precedence[token]
+      ) {
+        const operatorNode = operatorStack.pop()!;
+        operatorNode.right = outputStack.pop()!;
+        operatorNode.left = outputStack.pop()!;
+        outputStack.push(operatorNode);
       }
+
+      operatorStack.push(newOperator);
+    } else if (token === '(') {
+      operatorStack.push(new ASTNode('parenthesis', null, null, token));
+    } else if (token === ')') {
+      while (operatorStack.length && operatorStack[operatorStack.length - 1].value !== '(') {
+        const operatorNode = operatorStack.pop()!;
+        operatorNode.right = outputStack.pop()!;
+        operatorNode.left = outputStack.pop()!;
+        outputStack.push(operatorNode);
+      }
+      operatorStack.pop(); 
+    } else {
+      
+      outputStack.push(parseCondition(token));
     }
-  
-    return stack[0];
   }
-  
-  // Parse conditions like age > 30 or department = 'Sales'
+
+  while (operatorStack.length) {
+    const operatorNode = operatorStack.pop()!;
+    operatorNode.right = outputStack.pop()!;
+    operatorNode.left = outputStack.pop()!;
+    outputStack.push(operatorNode);
+  }
+
+  return outputStack[0];
+}
+
 export function parseCondition(condition: string): ASTNode {
-    const operators = [">", "<", "=", ">=", "<="];
-    let operator = operators.find(op => condition.includes(op));
-    let [leftOperand, rightOperand] = condition.split(operator!);
+
+  const operators = [">", "<", "=", ">=", "<="];
   
-    return new ASTNode("operand", null, null, {
-      leftOperand: leftOperand.trim(),
-      operator: operator!.trim(),
-      rightOperand: rightOperand.trim()
-    });
-  }
-  
-  // Combine multiple rules into a single AST using AND or OR
-export function combineRules(rules: string[], operator: string = "AND"): ASTNode {
-    let combinedAST: ASTNode | null = null;
-  
-    for (const rule of rules) {
-      const ast = createRule(rule);
-  
-      if (combinedAST === null) {
-        combinedAST = ast;
-      } else {
-        combinedAST = new ASTNode("operator", combinedAST, ast, operator);
+  let operator: string | undefined;
+  for (const op of operators) {
+      if (condition.includes(op)) {
+          operator = op;
+          break;
       }
-    }
-  
-    return combinedAST!;
   }
-  
-  // Function to evaluate the AST against provided data
+
+  if (!operator) {
+      throw new Error(`Invalid condition: "${condition}". No valid operator found.`);
+  }
+
+  const [leftOperand, rightOperand] = condition.split(operator).map(op => op.trim());
+
+  console.log("Parsed Condition:", { leftOperand, operator, rightOperand }); 
+
+  if (!rightOperand) {
+      throw new Error(`Invalid condition: "${condition}". Right operand is missing.`);
+  }
+
+  return new ASTNode("operand", null, null, {
+      leftOperand: leftOperand,
+      operator: operator,
+      rightOperand: rightOperand.replace(/'/g, "").trim() 
+  });
+}
+
+
 export function evaluateRule(ast: ASTNode, data: { [key: string]: any }): boolean {
-    if (ast.nodeType === "operator") {
-      const leftEval = evaluateRule(ast.left!, data);
-      const rightEval = evaluateRule(ast.right!, data);
-  
-      if (ast.value === "AND") {
-        return leftEval && rightEval;
-      } else if (ast.value === "OR") {
-        return leftEval || rightEval;
-      }
-    } else if (ast.nodeType === "operand") {
-      const condition = ast.value;
-      const leftOperand = data[condition.leftOperand];
-      const rightOperand = condition.rightOperand;
-  
-      switch (condition.operator) {
-        case ">":
-          return leftOperand > parseFloat(rightOperand);
-        case "<":
-          return leftOperand < parseFloat(rightOperand);
-        case "=":
-          return leftOperand === rightOperand.replace(/'/g, "");
-        case ">=":
-          return leftOperand >= parseFloat(rightOperand);
-        case "<=":
-          return leftOperand <= parseFloat(rightOperand);
-        default:
-          return false;
-      }
+  if (ast.nodeType === "operator") {
+    const leftEval = evaluateRule(ast.left!, data);
+    const rightEval = evaluateRule(ast.right!, data);
+
+    if (ast.value === "AND") {
+      return leftEval && rightEval;
+    } else if (ast.value === "OR") {
+      return leftEval || rightEval;
     }
-  
-    return false;
+  } else if (ast.nodeType === "operand") {
+    const condition = ast.value;
+    const leftOperand = data[condition.leftOperand];
+    const rightOperand = condition.rightOperand;
+
+    switch (condition.operator) {
+      case ">":
+        return leftOperand > parseFloat(rightOperand);
+      case "<":
+        return leftOperand < parseFloat(rightOperand);
+      case "=":
+        return leftOperand === rightOperand.replace(/'/g, "");
+      case ">=":
+        return leftOperand >= parseFloat(rightOperand);
+      case "<=":
+        return leftOperand <= parseFloat(rightOperand);
+      default:
+        return false;
+    }
+  }
+
+  return false;
 }
